@@ -19,6 +19,7 @@ from torch.nn import functional as F
 
 from etm import ETM
 from utils import nearest_neighbors, get_topic_coherence, get_topic_diversity
+from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(description='The Embedded Topic Model')
 
@@ -236,7 +237,18 @@ def visualize(m, show_emb=True):
                     word, nearest_neighbors(word, embeddings, vocab)))
             print('#'*100)
 
-def evaluate(m, source, tc=False, td=False):
+def report_score(model, writer, epoch, score, source):
+    
+    if writer is not None:
+        for name, weights in model.named_parameters():
+            writer.add_histogram(name, weights, epoch)
+ 
+    with open(args.save_path + '/' + source + '_scores', 'a') as handle:
+        handle.write(','.join([str(value) for key, value in score.items()]))
+
+    return
+
+def evaluate(m, source, writer=None, epoch=None, tc=False, td=False):
     """Compute perplexity on document completion.
     """
     m.eval()
@@ -278,19 +290,31 @@ def evaluate(m, source, tc=False, td=False):
             loss = loss.mean().item()
             acc_loss += loss
             cnt += 1
+
+        #Score to report
+        score = {}
+
         cur_loss = acc_loss / cnt
         ppl_dc = round(math.exp(cur_loss), 1)
         print('*'*100)
         print('{} Doc Completion PPL: {}'.format(source.upper(), ppl_dc))
+
+        score['ppl_dc'] = ppl_dc
+
         print('*'*100)
         if tc or td:
             beta = beta.data.cpu().numpy()
             if tc:
                 print('Computing topic coherence...')
-                get_topic_coherence(beta, train_tokens, vocab)
+                coherence = get_topic_coherence(beta, train_tokens, vocab)
             if td:
                 print('Computing topic diversity...')
-                get_topic_diversity(beta, 25)
+                diversity = get_topic_diversity(beta, 25)
+
+        score['tc'] = coherence if tc else np.nan
+        score['td'] = diversity if td else np.nan
+        report_score(m, writer, epoch, score, source)
+
         return ppl_dc
 
 if args.mode == 'train':
@@ -302,9 +326,13 @@ if args.mode == 'train':
     print('Visualizing model quality before training...')
     visualize(model)
     print('\n')
+
+    #Tensorboard writer
+    writer = SummaryWriter(args.save_path + '/logs/')
+
     for epoch in range(1, args.epochs):
         train(epoch)
-        val_ppl = evaluate(model, 'val')
+        val_ppl = evaluate(model, 'val', writer, epoch)
         if val_ppl < best_val_ppl:
             with open(ckpt, 'wb') as f:
                 torch.save(model, f)
@@ -321,7 +349,7 @@ if args.mode == 'train':
     with open(ckpt, 'rb') as f:
         model = torch.load(f)
     model = model.to(device)
-    val_ppl = evaluate(model, 'val')
+    val_ppl = evaluate(model, 'val', writer, args.epochs)
 else:   
     with open(ckpt, 'rb') as f:
         model = torch.load(f)

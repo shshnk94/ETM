@@ -11,6 +11,8 @@ def get_topic_diversity(beta, topk):
     TD = n_unique / (topk * num_topics)
     print('Topic diveristy is: {}'.format(TD))
 
+    return TD
+
 def get_document_frequency(data, wi, wj=None):
     if wj is None:
         D_wi = 0
@@ -72,6 +74,8 @@ def get_topic_coherence(beta, data, vocab):
     print('num topics: ', len(TC))
     TC = np.mean(TC) / counter
     print('Topic coherence is: {}'.format(TC))
+
+    return TC
 
 def nearest_neighbors(word, embeddings, vocab):
     vectors = embeddings.data.cpu().numpy() 
