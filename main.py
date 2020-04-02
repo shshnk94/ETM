@@ -249,6 +249,7 @@ def report_score(model, writer, epoch, score, source):
     return
 
 def evaluate(m, source, writer=None, epoch=None, tc=False, td=False):
+
     """Compute perplexity on document completion.
     """
     m.eval()
