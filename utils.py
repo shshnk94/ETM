@@ -14,8 +14,11 @@ def get_topic_diversity(beta, topk):
     return TD
 
 def get_document_frequency(data, wi, wj=None):
+
     if wj is None:
+
         D_wi = 0
+
         for l in range(len(data)):
             doc = data[l].squeeze(0)
             if len(doc) == 1: 
@@ -25,8 +28,10 @@ def get_document_frequency(data, wi, wj=None):
             if wi in doc:
                 D_wi += 1
         return D_wi
+
     D_wj = 0
     D_wi_wj = 0
+
     for l in range(len(data)):
         doc = data[l].squeeze(0)
         if len(doc) == 1: 
@@ -62,7 +67,7 @@ def get_topic_coherence(beta, data, vocab):
                 if D_wi_wj == 0:
                     f_wi_wj = -1
                 else:
-                    f_wi_wj = -1 + ( np.log(D_wi) + np.log(D_wj)  - 2.0 * np.log(D) ) / ( np.log(D_wi_wj) - np.log(D) )
+                    f_wi_wj = -1 + ((np.log(D_wi_wj) - np.log(D)) - (np.log(D_wi) + np.log(D_wj) - 2.0 * np.log(D))) / (-np.log(D_wi_wj) + np.log(D))
                 # update tmp: 
                 tmp += f_wi_wj
                 j += 1

@@ -231,10 +231,12 @@ def visualize(m, show_emb=True):
                 embeddings = m.rho.weight  # Vocab_size x E
             except:
                 embeddings = m.rho         # Vocab_size x E
+            """
             neighbors = []
             for word in queries:
                 print('word: {} .. neighbors: {}'.format(
                     word, nearest_neighbors(word, embeddings, vocab)))
+            """
             print('#'*100)
 
 def report_score(model, writer, epoch, score, source):
@@ -329,12 +331,14 @@ if args.mode == 'train':
     print('\n')
 
     #Tensorboard writer
+    if not os.path.exists(args.save_path + '/logs'):
+        os.makedirs(args.save_path + '/logs')
     writer = SummaryWriter(args.save_path + '/logs/')
 
-    for epoch in range(1, args.epochs):
+    for epoch in range(args.epochs):
         train(epoch)
         val_ppl = evaluate(model, 'val', writer, epoch)
-        if val_ppl < best_val_ppl:
+        if val_ppl < best_val_ppl or not epoch:
             with open(ckpt, 'wb') as f:
                 torch.save(model, f)
             best_epoch = epoch
@@ -404,6 +408,6 @@ else:
                             'intelligence', 'money', 'politics', 'health', 'people', 'family']
             print('\n')
             print('ETM embeddings...')
-            for word in queries:
-                print('word: {} .. etm neighbors: {}'.format(word, nearest_neighbors(word, rho_etm, vocab)))
+            #for word in queries:
+            #    print('word: {} .. etm neighbors: {}'.format(word, nearest_neighbors(word, rho_etm, vocab)))
             print('\n')
