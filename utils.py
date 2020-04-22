@@ -1,14 +1,11 @@
 import torch 
 import numpy as np
+from sklearn.metrics import pairwise_distances
 
 def get_topic_diversity(beta, topk):
-    num_topics = beta.shape[0]
-    list_w = np.zeros((num_topics, topk))
-    for k in range(num_topics):
-        idx = beta[k,:].argsort()[-topk:][::-1]
-        list_w[k,:] = idx
-    n_unique = len(np.unique(list_w))
-    TD = n_unique / (topk * num_topics)
+
+    logits = pairwise_distances(beta, metric='cosine')
+    TD = logits[np.triu_indices(logits.shape[0], k = 1)].mean()
     print('Topic diveristy is: {}'.format(TD))
 
     return TD
