@@ -18,12 +18,9 @@ def get_document_frequency(data, wi, wj=None):
 
         for l in range(len(data)):
             doc = data[l].squeeze(0)
-            if len(doc) == 1: 
-                continue
-            else:
-                doc = doc.squeeze()
             if wi in doc:
                 D_wi += 1
+
         return D_wi
 
     D_wj = 0
@@ -31,51 +28,46 @@ def get_document_frequency(data, wi, wj=None):
 
     for l in range(len(data)):
         doc = data[l].squeeze(0)
-        if len(doc) == 1: 
-            doc = [doc.squeeze()]
-        else:
-            doc = doc.squeeze()
         if wj in doc:
             D_wj += 1
             if wi in doc:
                 D_wi_wj += 1
+
     return D_wj, D_wi_wj 
 
 def get_topic_coherence(beta, data, vocab):
+
     D = len(data) ## number of docs...data is list of documents
     print('D: ', D)
     TC = []
     num_topics = len(beta)
+
     for k in range(num_topics):
+
         print('k: {}/{}'.format(k, num_topics))
         top_10 = list(beta[k].argsort()[-11:][::-1])
         top_words = [vocab[a] for a in top_10]
+
         TC_k = 0
         counter = 0
         for i, word in enumerate(top_10):
-            # get D(w_i)
+
             D_wi = get_document_frequency(data, word)
             j = i + 1
             tmp = 0
+
             while j < len(top_10) and j > i:
-                # get D(w_j) and D(w_i, w_j)
+
                 D_wj, D_wi_wj = get_document_frequency(data, word, top_10[j])
                 f_wi_wj = np.log(D_wi_wj + 1) - np.log(D_wi)
-                # get f(w_i, w_j)
-                #if D_wi_wj == 0:
-                #    f_wi_wj = -1
-                #else:
-                #    f_wi_wj = -1 + ((np.log(D_wi_wj) - np.log(D)) - (np.log(D_wi) + np.log(D_wj) - 2.0 * np.log(D))) / (-np.log(D_wi_wj) + np.log(D))
-                # update tmp: 
                 tmp += f_wi_wj
                 j += 1
                 counter += 1
-            # update TC_k
+
             TC_k += tmp 
-        TC.append(TC_k)
-    print('counter: ', counter)
-    print('num topics: ', len(TC))
-    TC = np.mean(TC) / counter
+        TC.append(TC_k / counter)
+
+    TC = np.mean(TC)
     print('Topic coherence is: {}'.format(TC))
 
     return TC

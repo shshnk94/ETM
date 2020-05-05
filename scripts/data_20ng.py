@@ -38,6 +38,10 @@ def contains_numeric(w):
     
 init_docs = init_docs_tr + init_docs_ts
 
+# Remove documents with length less than 10 and greater than 95th percentile.
+lengths = np.array([len(doc) for doc in init_docs])
+init_docs = [init_docs[i] for i in np.where((lengths > 10) & (lengths < np.percentile(lengths, 95)))[0]]
+
 # Removes all words with any punctuation or digits in them.
 init_docs = [[w.lower() for w in init_docs[doc] if not contains_punctuation(w)] for doc in range(len(init_docs))]
 init_docs = [[w for w in init_docs[doc] if not contains_numeric(w)] for doc in range(len(init_docs))]
@@ -68,6 +72,9 @@ trSize = 200#num_docs_tr - vaSize
 tsSize = 50#len(init_docs_ts)
 #idx_permute = np.random.permutation(num_docs_tr).astype(int)
 idx_permute = np.arange(num_docs_tr)
+
+# Remove outliers from train, valid, and test.
+
 
 # Remove words not in train_data
 vocab = list(set([w for idx_d in range(trSize) for w in init_docs[idx_permute[idx_d]].split() if w in vocab]))
