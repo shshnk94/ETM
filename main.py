@@ -18,7 +18,7 @@ from torch.nn import functional as F
 
 from os import path
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-from metrics import get_topic_coherence, get_topic_diversity
+from metrics import get_topic_coherence, get_topic_diversity, get_perplexity
 
 from etm import ETM
 from utils import nearest_neighbors
@@ -86,20 +86,18 @@ train_counts = train['counts']
 args.num_docs_train = len(train_tokens)
 
 # 2. dev set
-valid_tokens = valid['tokens']
-valid_counts = valid['counts']
-args.num_docs_valid = len(valid_tokens)
+valid_1_tokens = valid['tokens_1']
+valid_1_counts = valid['counts_1']
+valid_2_tokens = valid['tokens_2']
+valid_2_counts = valid['counts_2']
+args.num_docs_valid = len(valid_1_tokens)
 
 # 3. test data
-test_tokens = test['tokens']
-test_counts = test['counts']
-args.num_docs_test = len(test_tokens)
 test_1_tokens = test['tokens_1']
 test_1_counts = test['counts_1']
-args.num_docs_test_1 = len(test_1_tokens)
 test_2_tokens = test['tokens_2']
 test_2_counts = test['counts_2']
-args.num_docs_test_2 = len(test_2_tokens)
+args.num_docs_test = len(test_1_tokens)
 
 embeddings = None
 if not args.train_embeddings:
@@ -272,54 +270,50 @@ def evaluate(m, source, writer=None, epoch=None, tc=False, td=False):
     m.eval()
     with torch.no_grad():
         if source == 'val':
-            indices = torch.split(torch.tensor(range(args.num_docs_valid)), args.eval_batch_size)
-            tokens = valid_tokens
-            counts = valid_counts
+            num_docs_test = args.num_docs_valid
+            test_tokens_h1 = valid_1_tokens
+            test_counts_h1 = valid_1_counts
+            test_tokens_h2 = valid_2_tokens
+            test_counts_h2 = valid_2_counts
+
         else: 
-            indices = torch.split(torch.tensor(range(args.num_docs_test)), args.eval_batch_size)
-            tokens = test_tokens
-            counts = test_counts
+            num_docs_test = args.num_docs_test
+            test_tokens_h1 = test_1_tokens
+            test_counts_h1 = test_1_counts
+            test_tokens_h2 = test_2_tokens
+            test_counts_h2 = test_2_counts
 
         ## get \beta here
         beta = m.get_beta()
+        
+        theta = []
+        indices = torch.split(torch.tensor(range(num_docs_test)), args.eval_batch_size)
+        for idx, ind in enumerate(indices):
 
-        ### do dc and tc here
-        acc_loss = 0
-        cnt = 0
-        indices_1 = torch.split(torch.tensor(range(args.num_docs_test_1)), args.eval_batch_size)
-        for idx, ind in enumerate(indices_1):
             ## get theta from first half of docs
-            data_batch_1 = data.get_batch(test_1_tokens, test_1_counts, ind, args.vocab_size, device)
+            data_batch_1 = data.get_batch(test_tokens_h1, test_counts_h1, ind, args.vocab_size, device)
             sums_1 = data_batch_1.sum(1).unsqueeze(1)
             if args.bow_norm:
                 normalized_data_batch_1 = data_batch_1 / sums_1
             else:
                 normalized_data_batch_1 = data_batch_1
-            theta, _ = m.get_theta(normalized_data_batch_1)
 
-            ## get prediction loss using second half
-            data_batch_2 = data.get_batch(test_2_tokens, test_2_counts, ind, args.vocab_size, device)
-            sums_2 = data_batch_2.sum(1).unsqueeze(1)
-            res = torch.mm(theta, beta)
-            preds = torch.log(res)
-            recon_loss = -(preds * data_batch_2).sum(1)
-            
-            loss = recon_loss / sums_2.squeeze()
-            loss = loss.mean().item()
-            acc_loss += loss
-            cnt += 1
+            theta.append(m.get_theta(normalized_data_batch_1)[0].cpu().detach().numpy())
+        
+        theta = np.concatenate(theta, axis=0)
 
         #Score to report
         score = {}
 
-        cur_loss = math.exp(acc_loss / cnt)
-        ppl_dc = round(cur_loss, 1)
-        print('*'*100)
-        print('{} Doc Completion PPL: {}'.format(source.upper(), ppl_dc))
+        ## get prediction loss using second half
+        data_batch_2 = []
+        for idx, ind in enumerate(indices):
+            data_batch_2.append(data.get_batch(test_tokens_h2, test_counts_h2, ind, args.vocab_size, device).detach().cpu().numpy())
 
-        score['ppl_dc'] = ppl_dc
+        data_batch_2 = np.concatenate(data_batch_2, axis=0)
+        perplexity = get_perplexity(data_batch_2, theta, beta)
 
-        print('*'*100)
+        score['ppl'] = perplexity
         if tc or td:
             beta = beta.data.cpu().numpy()
             if tc:
@@ -333,7 +327,7 @@ def evaluate(m, source, writer=None, epoch=None, tc=False, td=False):
         score['td'] = diversity if td else np.nan
         report_score(m, writer, epoch, score, source)
 
-        return ppl_dc, cur_loss
+        return perplexity
 
 if args.mode == 'train':
 
@@ -355,11 +349,11 @@ if args.mode == 'train':
     for epoch in range(args.epochs):
 
         train_loss = train(epoch)
-        val_ppl, val_loss = evaluate(model, 'val', writer, epoch, args.tc, args.td)
+        val_ppl = evaluate(model, 'val', writer, epoch, args.tc, args.td)
         
         #Log loss into Tensorboard
         writer.add_scalar('Training Loss', train_loss, epoch)
-        writer.add_scalar('Validation Loss', val_loss, epoch)
+        writer.add_scalar('Validation PPL', val_ppl, epoch)
 
         if True:
         #if val_ppl < best_val_ppl or not epoch:

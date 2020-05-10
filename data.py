@@ -10,30 +10,31 @@ def _fetch(path, name):
     if name == 'train':
         token_file = os.path.join(path, 'bow_tr_tokens.mat')
         count_file = os.path.join(path, 'bow_tr_counts.mat')
-    elif name == 'valid':
-        token_file = os.path.join(path, 'bow_va_tokens.mat')
-        count_file = os.path.join(path, 'bow_va_counts.mat')
+        tokens = scipy.io.loadmat(token_file)['tokens'].squeeze()
+        counts = scipy.io.loadmat(count_file)['counts'].squeeze()
+
+        return {'tokens': tokens, 'counts': counts}
+
     else:
-        token_file = os.path.join(path, 'bow_ts_tokens.mat')
-        count_file = os.path.join(path, 'bow_ts_counts.mat')
+        if name == 'valid':
+            token_1_file = os.path.join(path, 'bow_va_h1_tokens.mat')
+            count_1_file = os.path.join(path, 'bow_va_h1_counts.mat')
+            token_2_file = os.path.join(path, 'bow_va_h2_tokens.mat')
+            count_2_file = os.path.join(path, 'bow_va_h2_counts.mat')
 
-    tokens = scipy.io.loadmat(token_file)['tokens'].squeeze()
-    counts = scipy.io.loadmat(count_file)['counts'].squeeze()
+        else:
+            token_1_file = os.path.join(path, 'bow_ts_h1_tokens.mat')
+            count_1_file = os.path.join(path, 'bow_ts_h1_counts.mat')
+            token_2_file = os.path.join(path, 'bow_ts_h2_tokens.mat')
+            count_2_file = os.path.join(path, 'bow_ts_h2_counts.mat')
 
-    if name == 'test':
-        token_1_file = os.path.join(path, 'bow_ts_h1_tokens.mat')
-        count_1_file = os.path.join(path, 'bow_ts_h1_counts.mat')
-        token_2_file = os.path.join(path, 'bow_ts_h2_tokens.mat')
-        count_2_file = os.path.join(path, 'bow_ts_h2_counts.mat')
         tokens_1 = scipy.io.loadmat(token_1_file)['tokens'].squeeze()
         counts_1 = scipy.io.loadmat(count_1_file)['counts'].squeeze()
         tokens_2 = scipy.io.loadmat(token_2_file)['tokens'].squeeze()
         counts_2 = scipy.io.loadmat(count_2_file)['counts'].squeeze()
-        return {'tokens': tokens, 'counts': counts, 
-                    'tokens_1': tokens_1, 'counts_1': counts_1, 
-                        'tokens_2': tokens_2, 'counts_2': counts_2}
 
-    return {'tokens': tokens, 'counts': counts}
+        return {'tokens_1': tokens_1, 'counts_1': counts_1, 'tokens_2': tokens_2, 'counts_2': counts_2}
+
 
 def get_data(path):
     with open(os.path.join(path, 'vocab.pkl'), 'rb') as f:
