@@ -91,6 +91,7 @@ docs_tr = [[word2id[w] for w in init_docs[idx_permute[idx_d]].split() if w in wo
 docs_va = [[word2id[w] for w in init_docs[idx_permute[idx_d+trSize]].split() if w in word2id] for idx_d in range(vaSize)]
 docs_ts = [[word2id[w] for w in init_docs[idx_d+num_docs_tr].split() if w in word2id] for idx_d in range(tsSize)]
 
+
 print('number of documents (train): {} [this should be equal to {}]'.format(len(docs_tr), trSize))
 print('number of documents (test): {} [this should be equal to {}]'.format(len(docs_ts), tsSize))
 print('number of documents (valid): {} [this should be equal to {}]'.format(len(docs_va), vaSize))
@@ -104,6 +105,9 @@ def remove_empty(in_docs):
 docs_tr = remove_empty(docs_tr)
 docs_ts = remove_empty(docs_ts)
 docs_va = remove_empty(docs_va)
+
+# Remove test documents with length=1
+docs_ts = [doc for doc in docs_ts if len(doc)>1]
 
 # Split test set in 2 halves
 print('splitting test and validation documents in 2 halves...')
