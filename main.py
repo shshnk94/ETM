@@ -355,8 +355,7 @@ if args.mode == 'train':
         writer.add_scalar('Training Loss', train_loss, epoch)
         writer.add_scalar('Validation PPL', val_ppl, epoch)
 
-        if True:
-        #if val_ppl < best_val_ppl or not epoch:
+        if val_ppl < best_val_ppl or not epoch:
             with open(ckpt, 'wb') as f:
                 torch.save(model, f)
             best_epoch = epoch
