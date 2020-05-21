@@ -311,7 +311,7 @@ def evaluate(m, source, writer=None, epoch=None, tc=False, td=False):
             data_batch_2.append(data.get_batch(test_tokens_h2, test_counts_h2, ind, args.vocab_size, device).detach().cpu().numpy())
 
         data_batch_2 = np.concatenate(data_batch_2, axis=0)
-        perplexity = get_perplexity(data_batch_2, theta, beta)
+        perplexity = get_perplexity(data_batch_2, theta, beta.detach().cpu().numpy())
 
         score['ppl'] = perplexity
         if tc or td:
