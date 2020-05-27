@@ -1,8 +1,9 @@
 import argparse
 import os 
 import sys
+import numpy as np
+import pandas as pd
 from sklearn.model_selection import ParameterGrid
-from itertools import product
 
 parser = argparse.ArgumentParser(description='etm cross validation wrapper')
 
@@ -50,7 +51,7 @@ def run_script(params, fold):
     """
 
 #Hyperparameters
-hyperparameters = {'epochs': ['1000', '5000'],
+hyperparameters = {'epochs': ['5000'],
                    'lr': ['5e-5', '5e-4', '5e-3']}
 
 for params in ParameterGrid(hyperparameters):
@@ -61,7 +62,7 @@ for params in ParameterGrid(hyperparameters):
         run_script(params, fold)
 
         path = os.path.join(args.save_path, 'k{}_e{}_lr{}'.format(args.topics, params['epochs'], float(params['lr'])), 'fold{}'.format(fold), 'val_scores.csv')
-        df = pd.read_csv(path).drop('Unnamed: 0', axis=1)
+        df = pd.read_csv(path, header=None)
         metrics += df.values
 
     metrics /= 3

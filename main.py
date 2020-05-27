@@ -27,7 +27,7 @@ from torch.utils.tensorboard import SummaryWriter
 parser = argparse.ArgumentParser(description='The Embedded Topic Model')
 
 ### data and file related arguments
-parser.add_argument('--fold', type=str, help='current cross valid fold number')
+parser.add_argument('--fold', type=str, default='', help='current cross valid fold number')
 #parser.add_argument('--valid', type=bool, default=True, help='toggle for training with validation vs final model')
 parser.add_argument('--dataset', type=str, default='20ng', help='name of corpus')
 parser.add_argument('--data_path', type=str, default='data/20ng', help='directory containing data')
@@ -131,7 +131,10 @@ print('=*'*100)
 if args.mode == 'eval':
     ckpt = args.load_from
 else:
-    ckpt = os.path.join(args.save_path, 'k{}_e{}_lr{}'.format(args.num_topics, args.epochs, args.lr), 'fold{}'.format(args.fold))
+    if args.fold != '':
+        ckpt = os.path.join(args.save_path, 'k{}_e{}_lr{}'.format(args.num_topics, args.epochs, args.lr), 'fold{}'.format(args.fold))
+    else:
+        ckpt = args.save_path
 
 ## define checkpoint
 if not os.path.exists(ckpt):
@@ -346,8 +349,8 @@ if args.mode == 'train':
         writer.add_scalar('Validation PPL', val_ppl, epoch)
         writer.add_scalar('Training Loss', train_loss, epoch)
 
-        if val_ppl < best_val_ppl or not epoch:
-        #if True:
+        #if val_ppl < best_val_ppl or not epoch:
+        if True:
             with open(ckpt + '/model.ckpt', 'wb') as f:
                 torch.save(model, f)
             best_epoch = epoch
@@ -363,13 +366,13 @@ if args.mode == 'train':
             visualize(model)
 
         all_val_ppls.append(val_ppl)
-
+    """
     with open(ckpt + '/model.ckpt', 'rb') as f:
         model = torch.load(f)
 
     model = model.to(device)
     val_ppl = evaluate(model, 'val', writer, args.epochs, args.tc, args.td)
-
+    """
 else:   
     with open(ckpt + '/model.ckpt', 'rb') as f:
         model = torch.load(f)

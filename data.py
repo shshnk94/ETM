@@ -41,8 +41,8 @@ def get_data(path, fold):
     with open(os.path.join(path, 'vocab.pkl'), 'rb') as f:
         vocab = pickle.load(f)
 
-    train = _fetch(os.path.join(path, 'fold{}'.format(fold)), 'train')
-    valid = _fetch(os.path.join(path, 'fold{}'.format(fold)), 'valid')
+    train = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'train')
+    valid = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'valid')
     test = _fetch(path, 'test')
 
     return vocab, train, valid, test
