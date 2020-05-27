@@ -36,12 +36,13 @@ def _fetch(path, name):
         return {'tokens_1': tokens_1, 'counts_1': counts_1, 'tokens_2': tokens_2, 'counts_2': counts_2}
 
 
-def get_data(path):
+def get_data(path, fold):
+
     with open(os.path.join(path, 'vocab.pkl'), 'rb') as f:
         vocab = pickle.load(f)
 
-    train = _fetch(path, 'train')
-    valid = _fetch(path, 'valid')
+    train = _fetch(os.path.join(path, 'fold{}'.format(fold)), 'train')
+    valid = _fetch(os.path.join(path, 'fold{}'.format(fold)), 'valid')
     test = _fetch(path, 'test')
 
     return vocab, train, valid, test

@@ -27,6 +27,8 @@ from torch.utils.tensorboard import SummaryWriter
 parser = argparse.ArgumentParser(description='The Embedded Topic Model')
 
 ### data and file related arguments
+parser.add_argument('--fold', type=str, help='current cross valid fold number')
+#parser.add_argument('--valid', type=bool, default=True, help='toggle for training with validation vs final model')
 parser.add_argument('--dataset', type=str, default='20ng', help='name of corpus')
 parser.add_argument('--data_path', type=str, default='data/20ng', help='directory containing data')
 parser.add_argument('--emb_path', type=str, default='data/20ng_embeddings.txt', help='directory containing word embeddings')
@@ -76,7 +78,7 @@ if torch.cuda.is_available():
 
 ## get data
 # 1. vocabulary
-vocab, train, valid, test = data.get_data(os.path.join(args.data_path))
+vocab, train, valid, test = data.get_data(os.path.join(args.data_path), args.fold)
 vocab_size = len(vocab)
 args.vocab_size = vocab_size
 
@@ -126,17 +128,14 @@ print('=*'*100)
 print('Training an Embedded Topic Model on {} with the following settings: {}'.format(args.dataset.upper(), args))
 print('=*'*100)
 
-## define checkpoint
-if not os.path.exists(args.save_path):
-    os.makedirs(args.save_path)
-
 if args.mode == 'eval':
     ckpt = args.load_from
 else:
-    ckpt = os.path.join(args.save_path, 
-        'etm_{}_K_{}_Htheta_{}_Optim_{}_Clip_{}_ThetaAct_{}_Lr_{}_Bsz_{}_RhoSize_{}_trainEmbeddings_{}'.format(
-        args.dataset, args.num_topics, args.t_hidden_size, args.optimizer, args.clip, args.theta_act, 
-            args.lr, args.batch_size, args.rho_size, args.train_embeddings))
+    ckpt = os.path.join(args.save_path, 'k{}_e{}_lr{}'.format(args.num_topics, args.epochs, args.lr), 'fold{}'.format(args.fold))
+
+## define checkpoint
+if not os.path.exists(ckpt):
+    os.makedirs(ckpt)
 
 ## define model and optimizer
 model = ETM(args.num_topics, vocab_size, args.t_hidden_size, args.rho_size, args.emb_size, 
@@ -194,15 +193,6 @@ def train(epoch):
         acc_kl_theta_loss += torch.sum(kld_theta).item()
         cnt += 1
 
-        if idx % args.log_interval == 0 and idx > 0:
-            print('Epoch: {}. batch: {}/{}. LR: {}. KL_theta: {}. Rec_loss: {}. NELBO: {}'.format(epoch, 
-                                                                                                  idx, 
-                                                                                                  len(indices), 
-                                                                                                  optimizer.param_groups[0]['lr'], 
-                                                                                                  round(acc_kl_theta_loss / cnt, 2),
-                                                                                                  round(acc_loss / cnt, 2),
-                                                                                                  round((acc_loss + acc_kl_theta_loss) / cnt, 2)))
-    
     print('*'*100)
     print('Epoch: {}. batch: {}/{}. LR: {}. KL_theta: {}. Rec_loss: {}. NELBO: {}'.format(epoch, 
                                                                                           idx, 
@@ -258,8 +248,8 @@ def report_score(model, writer, epoch, score, source):
         for name, weights in model.named_parameters():
             writer.add_histogram(name, weights, epoch)
  
-    with open(args.save_path + '/' + source + '_scores', 'a') as handle:
-        handle.write(','.join([str(value) for key, value in score.items()]))
+    with open(ckpt + '/' + source + '_scores.csv', 'a') as handle:
+        handle.write(','.join([str(value) for key, value in score.items()]) + '\n')
 
     return
 
@@ -342,9 +332,10 @@ if args.mode == 'train':
     print('\n')
 
     #Tensorboard writer
-    if not os.path.exists(args.save_path + '/logs'):
-        os.makedirs(args.save_path + '/logs')
-    writer = SummaryWriter(args.save_path + '/logs/')
+    if not os.path.exists(ckpt + '/logs'):
+        os.makedirs(ckpt + '/logs')
+
+    writer = SummaryWriter(ckpt + '/logs/')
 
     for epoch in range(args.epochs):
 
@@ -352,11 +343,12 @@ if args.mode == 'train':
         val_ppl = evaluate(model, 'val', writer, epoch, args.tc, args.td)
         
         #Log loss into Tensorboard
-        writer.add_scalar('Training Loss', train_loss, epoch)
         writer.add_scalar('Validation PPL', val_ppl, epoch)
+        writer.add_scalar('Training Loss', train_loss, epoch)
 
         if val_ppl < best_val_ppl or not epoch:
-            with open(ckpt, 'wb') as f:
+        #if True:
+            with open(ckpt + '/model.ckpt', 'wb') as f:
                 torch.save(model, f)
             best_epoch = epoch
             best_val_ppl = val_ppl
@@ -372,15 +364,16 @@ if args.mode == 'train':
 
         all_val_ppls.append(val_ppl)
 
-    with open(ckpt, 'rb') as f:
+    with open(ckpt + '/model.ckpt', 'rb') as f:
         model = torch.load(f)
 
     model = model.to(device)
     val_ppl = evaluate(model, 'val', writer, args.epochs, args.tc, args.td)
 
 else:   
-    with open(ckpt, 'rb') as f:
+    with open(ckpt + '/model.ckpt', 'rb') as f:
         model = torch.load(f)
+
     model = model.to(device)
     model.eval()
 
