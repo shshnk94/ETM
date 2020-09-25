@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import numpy as np 
 import math 
 
+from scipy.special import softmax
 from torch import nn
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -28,7 +29,8 @@ class ETM(nn.Module):
             self.rho = nn.Linear(rho_size, vocab_size, bias=False)
         else:
             num_embeddings, emsize = embeddings.size()
-            rho = nn.Embedding(num_embeddings, emsize)
+            #rho = nn.Embedding(num_embeddings, emsize)
+            #rho.weight.requires_grad=False
             self.rho = embeddings.clone().float().to(device)
 
         ## define the matrix containing the topic embeddings
@@ -97,6 +99,16 @@ class ETM(nn.Module):
         except:
             logit = self.alphas(self.rho)
         beta = F.softmax(logit, dim=0).transpose(1, 0) ## softmax over vocab dimension
+        #beta = logit.transpose(1, 0)
+        return beta
+
+    def get_logit_beta(self):
+        try:
+            logit = self.alphas(self.rho.weight) # torch.mm(self.rho, self.alphas)
+        except:
+            logit = self.alphas(self.rho)
+
+        beta = logit.transpose(1, 0)
         return beta
 
     def get_theta(self, normalized_bows):

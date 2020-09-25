@@ -5,7 +5,27 @@ import numpy as np
 import torch 
 import scipy.io
 
-def _fetch(path, name):
+def object_to_tensor(tokens, counts, vocab_size, device):
+
+    data = torch.zeros(tokens.shape[0], vocab_size).float().to(device)
+
+    for i in range(data.shape[0]):
+
+        doc, count = tokens[i], counts[i]
+
+        if len(doc) == 1: 
+            doc = [doc.squeeze()]
+            count = [count.squeeze()]
+        else:
+            doc = doc.squeeze()
+            count = count.squeeze()
+
+        for j, word in enumerate(doc):
+            data[i, word] = torch.from_numpy(count[j]).float().to(device)
+
+    return data
+
+def _fetch(path, name, vocab_size, device):
 
     if name == 'train':
         token_file = os.path.join(path, 'bow_tr_tokens.mat')
@@ -13,7 +33,7 @@ def _fetch(path, name):
         tokens = scipy.io.loadmat(token_file)['tokens'].squeeze()
         counts = scipy.io.loadmat(count_file)['counts'].squeeze()
 
-        return {'tokens': tokens, 'counts': counts}
+        return object_to_tensor(tokens, counts, vocab_size, device)
 
     else:
         if name == 'valid':
@@ -33,37 +53,23 @@ def _fetch(path, name):
         tokens_2 = scipy.io.loadmat(token_2_file)['tokens'].squeeze()
         counts_2 = scipy.io.loadmat(count_2_file)['counts'].squeeze()
 
-        return {'tokens_1': tokens_1, 'counts_1': counts_1, 'tokens_2': tokens_2, 'counts_2': counts_2}
+        return object_to_tensor(tokens_1, counts_1, vocab_size, device), object_to_tensor(tokens_2, counts_2, vocab_size, device)
 
-
-def get_data(path, fold):
-
+def get_data(path, step, device, fold=None):
+    
     with open(os.path.join(path, 'vocab.pkl'), 'rb') as f:
         vocab = pickle.load(f)
 
-    train = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'train')
-    valid = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'valid')
-    test = _fetch(path, 'test')
+    if step == 'train':
 
-    return vocab, train, valid, test
+        train = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'train', len(vocab), device)
+        valid_1, valid_2 = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'valid', len(vocab), device)
 
-def get_batch(tokens, counts, ind, vocab_size, device, emsize=300):
-    """fetch input data by batch."""
-    batch_size = len(ind)
-    data_batch = np.zeros((batch_size, vocab_size))
+        return vocab, train, valid_1, valid_2
 
-    for i, doc_id in enumerate(ind):
-        doc = tokens[doc_id]
-        count = counts[doc_id]
-        L = count.shape[1]
-        if len(doc) == 1: 
-            doc = [doc.squeeze()]
-            count = [count.squeeze()]
-        else:
-            doc = doc.squeeze()
-            count = count.squeeze()
-        if doc_id != -1:
-            for j, word in enumerate(doc):
-                data_batch[i, word] = count[j]
-    data_batch = torch.from_numpy(data_batch).float().to(device)
-    return data_batch
+    else:
+        test_1, test_2 = _fetch(path, 'test', len(vocab), device)
+        return test_1, test_2
+
+def get_batch(data, ind, device):
+    return data[ind].to(device)

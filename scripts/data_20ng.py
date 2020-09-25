@@ -25,8 +25,8 @@ with open('stops.txt', 'r') as f:
 
 # Read data
 print('reading data...')
-train_data = fetch_20newsgroups(subset='train')
-test_data = fetch_20newsgroups(subset='test')
+train_data = fetch_20newsgroups(subset='train', shuffle=False)
+test_data = fetch_20newsgroups(subset='test', shuffle=False)
 
 init_docs_tr = [re.findall(r'''[\w']+|[.,!?;-~{}`´_<=>:/@*()&'$%#"]''', train_data.data[doc]) for doc in range(len(train_data.data))]
 init_docs_ts = [re.findall(r'''[\w']+|[.,!?;-~{}`´_<=>:/@*()&'$%#"]''', test_data.data[doc]) for doc in range(len(test_data.data))]
@@ -219,4 +219,5 @@ savemat(path_save + 'bow_va_h2_counts.mat', {'counts': bow_va_h2_counts}, do_com
 del bow_va_h2
 del bow_va_h2_tokens
 del bow_va_h2_counts
+
 print('Data ready !!')

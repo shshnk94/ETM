@@ -12,6 +12,7 @@ import random
 import matplotlib.pyplot as plt 
 import data
 import scipy.io
+from scipy.special import softmax
 
 from torch import nn, optim
 from torch.nn import functional as F
@@ -78,49 +79,19 @@ if torch.cuda.is_available():
 
 ## get data
 # 1. vocabulary
-vocab, train, valid, test = data.get_data(os.path.join(args.data_path), args.fold)
+vocab, train, valid_1, valid_2 = data.get_data(os.path.join(args.data_path), 'train', device, args.fold)
 vocab_size = len(vocab)
 args.vocab_size = vocab_size
-
-# 1. training data
-train_tokens = train['tokens']
-train_counts = train['counts']
-args.num_docs_train = len(train_tokens)
-
-# 2. dev set
-valid_1_tokens = valid['tokens_1']
-valid_1_counts = valid['counts_1']
-valid_2_tokens = valid['tokens_2']
-valid_2_counts = valid['counts_2']
-args.num_docs_valid = len(valid_1_tokens)
-
-# 3. test data
-test_1_tokens = test['tokens_1']
-test_1_counts = test['counts_1']
-test_2_tokens = test['tokens_2']
-test_2_counts = test['counts_2']
-args.num_docs_test = len(test_1_tokens)
+args.num_docs_train = train.shape[0]
+args.num_docs_valid = valid_1.shape[0]
 
 embeddings = None
 if not args.train_embeddings:
-    emb_path = args.emb_path
-    vect_path = os.path.join(args.data_path.split('/')[0], 'embeddings.pkl')   
-    vectors = {}
-    with open(emb_path, 'rb') as f:
-        for l in f:
-            line = l.decode().split()
-            word = line[0]
-            if word in vocab:
-                vect = np.array(line[1:]).astype(np.float)
-                vectors[word] = vect
-    embeddings = np.zeros((vocab_size, args.emb_size))
-    words_found = 0
-    for i, word in enumerate(vocab):
-        try: 
-            embeddings[i] = vectors[word]
-            words_found += 1
-        except KeyError:
-            embeddings[i] = np.random.normal(scale=0.6, size=(args.emb_size, ))
+
+    print("Reading pretrained word embeddings...")
+    with open(os.path.join(args.emb_path, 'embeddings.pkl'), 'rb') as f:
+       embeddings = pickle.load(f)
+ 
     embeddings = torch.from_numpy(embeddings).to(device)
     args.embeddings_dim = embeddings.size()
 
@@ -128,7 +99,7 @@ print('=*'*100)
 print('Training an Embedded Topic Model on {} with the following settings: {}'.format(args.dataset.upper(), args))
 print('=*'*100)
 
-if args.mode == 'eval':
+if args.mode == 'test':
     ckpt = args.load_from
 else:
     if args.fold != '':
@@ -160,7 +131,7 @@ else:
     print('Defaulting to vanilla SGD')
     optimizer = optim.SGD(model.parameters(), lr=args.lr)
 
-def train(epoch):
+def training(epoch):
 
     model.train()
 
@@ -168,7 +139,7 @@ def train(epoch):
     acc_kl_theta_loss = 0
 
     cnt = 0
-    indices = torch.randperm(args.num_docs_train)
+    indices = torch.randperm(args.num_docs_train, device=device)
     indices = torch.split(indices, args.batch_size)
 
     for idx, ind in enumerate(indices):
@@ -176,11 +147,10 @@ def train(epoch):
         optimizer.zero_grad()
         model.zero_grad()
 
-        data_batch = data.get_batch(train_tokens, train_counts, ind, args.vocab_size, device)
-        sums = data_batch.sum(1).unsqueeze(1)
+        data_batch = data.get_batch(train, ind, device)
 
         if args.bow_norm:
-            normalized_data_batch = data_batch / sums
+            normalized_data_batch = data_batch / data_batch.sum(1).unsqueeze(1)
         else:
             normalized_data_batch = data_batch
 
@@ -221,10 +191,10 @@ def visualize(m, show_emb=True):
         print('#'*100)
         print('Visualize topics...')
         topics_words = []
-        gammas = m.get_beta()
+        gammas = m.get_beta().detach().cpu().numpy()
         for k in range(args.num_topics):
             gamma = gammas[k]
-            top_words = list(gamma.cpu().numpy().argsort()[-args.num_words+1:][::-1])
+            top_words = list(gamma.argsort()[-args.num_words+1:][::-1])
             topic_words = [vocab[a] for a in top_words]
             topics_words.append(' '.join(topic_words))
             print('Topic {}: {}'.format(k, topic_words))
@@ -237,16 +207,11 @@ def visualize(m, show_emb=True):
                 embeddings = m.rho.weight  # Vocab_size x E
             except:
                 embeddings = m.rho         # Vocab_size x E
-            """
-            neighbors = []
-            for word in queries:
-                print('word: {} .. neighbors: {}'.format(
-                    word, nearest_neighbors(word, embeddings, vocab)))
-            """
+
             print('#'*100)
 
 def report_score(model, writer, epoch, score, source):
-    
+     
     if writer is not None:
         for name, weights in model.named_parameters():
             writer.add_histogram(name, weights, epoch)
@@ -264,36 +229,32 @@ def evaluate(m, source, writer=None, epoch=None, tc=False, td=False):
     with torch.no_grad():
         if source == 'val':
             num_docs_test = args.num_docs_valid
-            test_tokens_h1 = valid_1_tokens
-            test_counts_h1 = valid_1_counts
-            test_tokens_h2 = valid_2_tokens
-            test_counts_h2 = valid_2_counts
+            test_h1 = valid_1
+            test_h2 = valid_2
 
         else: 
-            num_docs_test = args.num_docs_test
-            test_tokens_h1 = test_1_tokens
-            test_counts_h1 = test_1_counts
-            test_tokens_h2 = test_2_tokens
-            test_counts_h2 = test_2_counts
+            test_1, test_2 = data.get_data(os.path.join(args.data_path), 'test', device)
+            num_docs_test = test_1.shape[0]
+            test_h1 = test_1
+            test_h2 = test_2
 
         ## get \beta here
         beta = m.get_beta()
         
         theta = []
-        indices = torch.split(torch.tensor(range(num_docs_test)), args.eval_batch_size)
+        indices = torch.split(torch.tensor(range(num_docs_test), device=device), args.eval_batch_size)
         for idx, ind in enumerate(indices):
 
             ## get theta from first half of docs
-            data_batch_1 = data.get_batch(test_tokens_h1, test_counts_h1, ind, args.vocab_size, device)
-            sums_1 = data_batch_1.sum(1).unsqueeze(1)
+            data_batch_1 = data.get_batch(test_h1, ind, device)
             if args.bow_norm:
-                normalized_data_batch_1 = data_batch_1 / sums_1
+                normalized_data_batch_1 = data_batch_1 / data_batch_1.sum(1).unsqueeze(1)
             else:
                 normalized_data_batch_1 = data_batch_1
 
-            theta.append(m.get_theta(normalized_data_batch_1)[0].cpu().detach().numpy())
+            theta.append(m.get_theta(normalized_data_batch_1)[0])
         
-        theta = np.concatenate(theta, axis=0)
+        theta = torch.cat(theta, dim=0)
 
         #Score to report
         score = {}
@@ -301,25 +262,29 @@ def evaluate(m, source, writer=None, epoch=None, tc=False, td=False):
         ## get prediction loss using second half
         data_batch_2 = []
         for idx, ind in enumerate(indices):
-            data_batch_2.append(data.get_batch(test_tokens_h2, test_counts_h2, ind, args.vocab_size, device).detach().cpu().numpy())
+            data_batch_2.append(data.get_batch(test_h2, ind, device))
 
-        data_batch_2 = np.concatenate(data_batch_2, axis=0)
-        perplexity = get_perplexity(data_batch_2, theta, beta.detach().cpu().numpy())
+        data_batch_2 = torch.cat(data_batch_2, dim=0)
+        perplexity = get_perplexity(data_batch_2, theta, beta)
 
         score['ppl'] = perplexity
         if tc or td:
-            beta = beta.data.cpu().numpy()
+
+            #Store \beta during inference in the ckpt folder
+            with open(os.path.join(ckpt, 'beta.pkl'), 'wb') as f:
+                pickle.dump(beta.detach().cpu().numpy(), f)
+
             if tc:
                 print('Computing topic coherence...')
-                coherence = get_topic_coherence(beta, train_tokens, 'etm')
+                coherence = get_topic_coherence(beta, train, 'etm')
             if td:
                 print('Computing topic diversity...')
-                diversity = get_topic_diversity(beta, 'etm')
+                diversity = get_topic_diversity(beta)
 
         score['tc'] = coherence if tc else np.nan
         score['td'] = diversity if td else np.nan
         report_score(m, writer, epoch, score, source)
-
+        
         return perplexity
 
 if args.mode == 'train':
@@ -338,19 +303,20 @@ if args.mode == 'train':
     if not os.path.exists(ckpt + '/logs'):
         os.makedirs(ckpt + '/logs')
 
-    writer = SummaryWriter(ckpt + '/logs/')
+    #FIXME: writer = SummaryWriter(ckpt + '/logs/')
+    writer = None
 
     for epoch in range(args.epochs):
 
-        train_loss = train(epoch)
+        train_loss = training(epoch)
         val_ppl = evaluate(model, 'val', writer, epoch, args.tc, args.td)
         
         #Log loss into Tensorboard
-        writer.add_scalar('Validation PPL', val_ppl, epoch)
-        writer.add_scalar('Training Loss', train_loss, epoch)
+        #writer.add_scalar('Validation PPL', val_ppl, epoch)
+        #writer.add_scalar('Training Loss', train_loss, epoch)
 
         #if val_ppl < best_val_ppl or not epoch:
-        if True:
+        if args.fold == "" and True:
             with open(ckpt + '/model.ckpt', 'wb') as f:
                 torch.save(model, f)
             best_epoch = epoch
@@ -366,15 +332,15 @@ if args.mode == 'train':
             visualize(model)
 
         all_val_ppls.append(val_ppl)
-    """
+    
     with open(ckpt + '/model.ckpt', 'rb') as f:
         model = torch.load(f)
 
     model = model.to(device)
     val_ppl = evaluate(model, 'val', writer, args.epochs, args.tc, args.td)
-    """
+    
 else:   
-    with open(ckpt + '/model.ckpt', 'rb') as f:
+    with open(os.path.join(ckpt, 'model.ckpt'), 'rb') as f:
         model = torch.load(f)
 
     model = model.to(device)
@@ -391,7 +357,7 @@ else:
         thetaWeightedAvg = torch.zeros(1, args.num_topics).to(device)
         cnt = 0
         for idx, ind in enumerate(indices):
-            data_batch = data.get_batch(train_tokens, train_counts, ind, args.vocab_size, device)
+            data_batch = data.get_batch(train, ind, device)
             sums = data_batch.sum(1).unsqueeze(1)
             cnt += sums.sum(0).squeeze().cpu().numpy()
             if args.bow_norm:
@@ -408,13 +374,13 @@ else:
 
         print('\nThe 10 most used topics are {}'.format(thetaWeightedAvg.argsort()[::-1][:10]))
         ## show topics
-        beta = model.get_beta()
+        beta = model.get_beta().detach().cpu().numpy()
         topic_indices = list(np.random.choice(args.num_topics, 10)) # 10 random topics
         print('\n')
         with open(args.save_path + '/topics.txt', 'w') as f:
             for k in range(args.num_topics):#topic_indices:
                 gamma = beta[k]
-                top_words = list(gamma.cpu().numpy().argsort()[-args.num_words+1:][::-1])
+                top_words = list(gamma.argsort()[-args.num_words+1:][::-1])
                 topic_words = [vocab[a] for a in top_words]
                 f.write('Topic {}: {}\n'.format(k, topic_words))
                 print('Topic {}: {}'.format(k, topic_words))
