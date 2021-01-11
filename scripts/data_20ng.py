@@ -14,7 +14,6 @@ import os
 path_save = sys.argv[1]
 valid_split_percent = float(sys.argv[2])
 
-
 # Maximum / minimum document frequency
 max_df = 0.7
 min_df = 100  # choose desired value for min_df

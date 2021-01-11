@@ -1,4 +1,5 @@
 import torch 
+from torch import optim
 import numpy as np
 from sklearn.metrics import pairwise_distances
 
@@ -88,3 +89,54 @@ def nearest_neighbors(word, embeddings, vocab):
     nearest_neighbors = mostSimilar[:20]
     nearest_neighbors = [vocab[comp] for comp in nearest_neighbors]
     return nearest_neighbors
+
+def visualize(m, show_emb=True):
+    if not os.path.exists('./results'):
+        os.makedirs('./results')
+
+    m.eval()
+
+    queries = ['andrew', 'computer', 'sports', 'religion', 'man', 'love', 
+                'intelligence', 'money', 'politics', 'health', 'people', 'family']
+
+    ## visualize topics using monte carlo
+    with torch.no_grad():
+        print('#'*100)
+        print('Visualize topics...')
+        topics_words = []
+        gammas = m.get_beta().detach().cpu().numpy()
+        for k in range(args.num_topics):
+            gamma = gammas[k]
+            top_words = list(gamma.argsort()[-args.num_words+1:][::-1])
+            topic_words = [vocab[a] for a in top_words]
+            topics_words.append(' '.join(topic_words))
+            print('Topic {}: {}'.format(k, topic_words))
+
+        if show_emb:
+            ## visualize word embeddings by using V to get nearest neighbors
+            print('#'*100)
+            print('Visualize word embeddings by using output embedding matrix')
+            try:
+                embeddings = m.rho.weight  # Vocab_size x E
+            except:
+                embeddings = m.rho         # Vocab_size x E
+
+            print('#'*100)
+
+def get_optimizer(args, config, model):
+
+    if args.optimizer == 'adam':
+        optimizer = optim.Adam(model.parameters(), lr=config['lr'], weight_decay=config['wdecay'])
+    elif args.optimizer == 'adagrad':
+        optimizer = optim.Adagrad(model.parameters(), lr=config['lr'], weight_decay=args.wdecay)
+    elif args.optimizer == 'adadelta':
+        optimizer = optim.Adadelta(model.parameters(), lr=config['lr'], weight_decay=args.wdecay)
+    elif args.optimizer == 'rmsprop':
+        optimizer = optim.RMSprop(model.parameters(), lr=config['lr'], weight_decay=args.wdecay)
+    elif args.optimizer == 'asgd':
+        optimizer = optim.ASGD(model.parameters(), lr=config['lr'], t0=0, lambd=0., weight_decay=args.wdecay)
+    else:
+        print('Defaulting to vanilla SGD')
+        optimizer = optim.SGD(model.parameters(), lr=config['lr'])
+
+    return optimizer

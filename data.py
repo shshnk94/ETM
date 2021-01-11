@@ -55,7 +55,7 @@ def _fetch(path, name, vocab_size, device):
 
         return object_to_tensor(tokens_1, counts_1, vocab_size, device), object_to_tensor(tokens_2, counts_2, vocab_size, device)
 
-def get_data(path, step, device, fold=None):
+def get_data(path, step, device, fold=''):
     
     with open(os.path.join(path, 'vocab.pkl'), 'rb') as f:
         vocab = pickle.load(f)
@@ -63,9 +63,13 @@ def get_data(path, step, device, fold=None):
     if step == 'train':
 
         train = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'train', len(vocab), device)
-        valid_1, valid_2 = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'valid', len(vocab), device)
+        #valid_1, valid_2 = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'valid', len(vocab), device)
 
-        return vocab, train, valid_1, valid_2
+        return vocab, train#, valid_1, valid_2
+    
+    elif step == 'valid':
+        valid_1, valid_2 = _fetch(os.path.join(path, 'fold{}'.format(fold)) if fold != '' else path, 'valid', len(vocab), device)
+        return valid_1, valid_2
 
     else:
         test_1, test_2 = _fetch(path, 'test', len(vocab), device)
