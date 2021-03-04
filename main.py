@@ -1,4 +1,3 @@
-#/usr/bin/python
 from __future__ import print_function
 
 import sys
@@ -18,6 +17,7 @@ from torch import nn, optim
 from torch.nn import functional as F
 import ray
 from ray import tune
+from ray.tune.schedulers import ASHAScheduler
 from ray.tune.suggest.hyperopt import HyperOptSearch
 from ray.tune.suggest import ConcurrencyLimiter
 
@@ -325,7 +325,7 @@ if __name__ == '__main__':
                             mode="min",
                             keep_checkpoints_num=1,
                             checkpoint_score_attr='min-validation_perplexity',
-                            stop={"training_iteration": 1000},
+                            stop={"training_iteration": 2000},
                             resources_per_trial={"cpu": 2, "gpu": 0.33},
                             search_alg=algorithm,
                             num_samples=100,
@@ -333,28 +333,37 @@ if __name__ == '__main__':
 
         print("Best config is:", analysis.best_config)
         with open(os.path.join(args.save_path, 'best_config.pkl'), 'wb') as f:
-            pkl.dump(analysis.best_config, f)
+            pickle.dump(analysis.best_config, f)
     
     elif args.mode == 'train':
         
         with open(os.path.join(args.save_path, 'best_config.pkl'), 'rb') as f:
-            config = pkl.load(f)
+            config = pickle.load(f)
+        
+        scheduler = ASHAScheduler(time_attr='epochs',
+                                  metric='validation_perplexity',
+                                  mode='min',
+                                  max_t=50,
+                                  grace_period=50,
+                                  reduction_factor=2,
+                                  brackets=1)
 
         analysis = tune.run(train,
-                            metric="validation_perplexity",
-                            mode="min",
+                            #metric="validation_perplexity",
+                            #mode="min",
                             keep_checkpoints_num=1,
                             checkpoint_score_attr='min-validation_perplexity',
-                            stop={"training_iteration": 5000},
+                            stop={"training_iteration": 2000},
                             resources_per_trial={"cpu": 2, "gpu": 0.25},
                             num_samples=1,
+                            scheduler=scheduler,
                             config=config)
     
     else:
 
         vocab, train_set = data.get_data(os.path.join(args.data_path), 'train', device, args.fold)
         with open(os.path.join(args.save_path, 'best_config.pkl'), 'rb') as f:
-            config = pkl.load(f)
+            config = pickle.load(f)
 
         model = ETM(args.num_topics, 
                 len(vocab), 
